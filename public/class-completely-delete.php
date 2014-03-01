@@ -28,7 +28,7 @@ class Completely_Delete {
 	 *
 	 * @var     string
 	 */
-	const VERSION = '0.7';
+	const VERSION = '0.8.0';
 
 	/**
 	 * Unique identifier for your plugin.
@@ -65,15 +65,15 @@ class Completely_Delete {
 		add_action( 'init', array( $this, 'load_plugin_textdomain' ) );
 
 		// Display the admin notification
-		add_action( 'admin_notices', array( $this, 'plugin_activation' ) ) ;
+		add_action( 'admin_notices', array( $this, 'admin_notice_activation' ) );
 	}
 
 	/**
 	 * Return the plugin slug.
 	 *
-	 * @since    0.1
+	 * @since 0.1
 	 *
-	 * @return    Plugin slug variable.
+	 * @return string Plugin slug variable.
 	 */
 	public function get_plugin_slug() {
 
@@ -97,24 +97,39 @@ class Completely_Delete {
 		return self::$instance;
 	}
 
-	public function plugin_activation() {
+	/**
+	 * Fired when the plugin is activated.
+	 *
+	 * @since    0.8.0
+	 *
+	 * @param    boolean    $network_wide    True if WPMU superadmin uses
+	 *                                       "Network Activate" action, false if
+	 *                                       WPMU is disabled or plugin is
+	 *                                       activated on an individual blog.
+	 */
+	public static function activate( $network_wide ) {
 
-		$screen = get_current_screen();
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
 
-		if( false == get_option( 'cd-display-activation-message' ) && 'plugins' == $screen->id ) {
-			$plugin = self::get_instance();
+			if ( $network_wide  ) {
 
-			add_option( 'cd-display-activation-message', true );
+				// Get all blog ids
+				$blog_ids = self::get_blog_ids();
 
-			$html = '<div class="updated">';
-				$html .= '<p>';
-					$html .= sprintf( __( 'If you\'d like to trash / delete a post with all its attachments, please update the plugin <strong><a href="%s">Settings</a></strong>.', $plugin->get_plugin_slug() ), admin_url( 'options-general.php?page=' . $plugin->get_plugin_slug() ) );
-				$html .= '</p>';
-			$html .= '</div><!-- /.updated -->';
+				foreach ( (array) $blog_ids as $blog_id ) {
 
-			echo $html;
+					switch_to_blog( $blog_id );
+					self::single_activate();
+				}
 
+				restore_current_blog();
+			} else {
+				self::single_activate();
+			}
+		} else {
+			self::single_activate();
 		}
+
 	}
 
 	/**
@@ -136,19 +151,16 @@ class Completely_Delete {
 				// Get all blog ids
 				$blog_ids = self::get_blog_ids();
 
-				foreach ( $blog_ids as $blog_id ) {
+				foreach ( (array) $blog_ids as $blog_id ) {
 
 					switch_to_blog( $blog_id );
 					self::single_deactivate();
-
 				}
 
 				restore_current_blog();
-
 			} else {
 				self::single_deactivate();
 			}
-
 		} else {
 			self::single_deactivate();
 		}
@@ -163,7 +175,7 @@ class Completely_Delete {
 	 *
 	 * @since    0.1
 	 *
-	 * @return   array|false    The blog ids, false if no matches.
+	 * @return   array<int>|false    The blog ids, false if no matches.
 	 */
 	private static function get_blog_ids() {
 
@@ -179,25 +191,46 @@ class Completely_Delete {
 	}
 
 	/**
+	 * Fired for each blog when the plugin is activated.
+	 *
+	 * @since    0.8.0
+	 */
+	private static function single_activate() {
+
+		if ( false == get_option( 'cd-display-activation-message' ) ) {
+			add_option( 'cd-display-activation-message', true );
+		}
+	}
+
+	/**
 	 * Fired for each blog when the plugin is deactivated.
 	 *
 	 * @since    0.7
 	 */
 	private static function single_deactivate() {
 
-		if( false == delete_option( 'cd-display-activation-message' ) ) {
+		delete_option( 'cd-display-activation-message' );
+
+	}
+
+	public function admin_notice_activation() {
+
+		$screen = get_current_screen();
+
+		if ( true == get_option( 'cd-display-activation-message' ) && 'plugins' == $screen->id ) {
 			$plugin = self::get_instance();
 
-			$html = '<div class="error">';
-				$html .= '<p>';
-					$html .= __( 'There was a problem deactivating the Completely Delete plugin. Please try again.', $plugin->get_plugin_slug() );
-				$html .= '</p>';
+			$html  = '<div class="updated">';
+			$html .= '<p>';
+				$html .= sprintf( __( '<strong>Trash / delete a post with all its attachments is enabled.</strong> Disable these options in the <strong><a href="%s">Settings</a></strong> page.', $plugin->get_plugin_slug() ), admin_url( 'options-general.php?page=' . $plugin->get_plugin_slug() ) );
+			$html .= '</p>';
 			$html .= '</div><!-- /.updated -->';
 
 			echo $html;
 
-		}
+			delete_option( 'cd-display-activation-message' );
 
+		}
 	}
 
 	/**

@@ -22,6 +22,18 @@
 class Completely_Delete_Admin {
 
 	/**
+	 * Unique identifier for your plugin.
+	 *
+	 *
+	 * Call $plugin_slug from public plugin class later.
+	 *
+	 * @since    0.8.0
+	 *
+	 * @var      string
+	 */
+	protected $plugin_slug = null;
+
+	/**
 	 * Instance of this class.
 	 *
 	 * @since    0.1
@@ -61,7 +73,6 @@ class Completely_Delete_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
 
 		// Add the options page and menu item.
-		require_once( plugin_dir_path( __FILE__ ) . 'includes/class.settings-api.php' );
 		require_once( plugin_dir_path( __FILE__ ) . 'includes/settings.php' );
 
 		// Add the options page and menu item.
@@ -78,7 +89,7 @@ class Completely_Delete_Admin {
 		add_action( 'untrash_post', array( $this, 'untrash_post' ) );
 
 		$options = $this->get_options();
-		if ( 'on' == $options['delete_attachments'] ) {
+		if ( isset( $options['delete_attachments'] ) && 'on' == $options['delete_attachments'] ) {
 			add_action( 'before_delete_post', array( $this, 'before_delete_post' ) );
 		}
 
@@ -183,12 +194,15 @@ class Completely_Delete_Admin {
 	 * Add settings action link to the plugins page.
 	 *
 	 * @since    0.1
+	 *
+	 * @param array<string> $links Action links
+	 * @return  array<string> Action links
 	 */
 	public function add_action_links( $links ) {
 
 		return array_merge(
 			array(
-				'settings' => '<a href="' . admin_url( 'options-general.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings', $this->plugin_slug ) . '</a>'
+				'settings' => '<a href="' . admin_url( 'options-general.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings' ) . '</a>',
 			),
 			$links
 		);
@@ -213,19 +227,18 @@ class Completely_Delete_Admin {
 	 *
 	 * @since    0.2
 	 *
-	 * @return   HTML
+	 * @return   string The HTML of delete button
 	 */
 	public function add_delete_button() {
 
 		global $post;
 
 		if ( isset( $_GET['post'] ) ) {
-	?>
-	<div id="cd-action">
-		<a class="submitcd delete"
-			href="<?php echo $this->get_action_url( $_GET['post'] ); ?>"><?php _e( 'Completely Delete', $this->plugin_slug ); ?>
-		</a>
-	</div>
+			?>
+				<div id="cd-action">
+					<a class="submitcd delete" href="<?php echo $this->get_action_url( $_GET['post'] ); ?>"><?php _e( 'Completely Delete', $this->plugin_slug ); ?>
+					</a>
+				</div>
 			<?php
 		}
 	}
@@ -235,7 +248,7 @@ class Completely_Delete_Admin {
 	 *
 	 * @since  0.2
 	 *
-	 * @return voide
+	 * @return void
 	 */
 	public function completely_delete() {
 
@@ -282,9 +295,9 @@ class Completely_Delete_Admin {
 
 		// Point children of this page to its parent, also clean the cache of affected children
 		$options = $this->get_options();
-		// var_dump($where);
+
 		$sql = "SELECT ID, post_status FROM $wpdb->posts WHERE post_parent = %d AND post_type != 'revision'";
-		$sql .= ( 'off' == $options['trash_attachments'] ) ? " AND post_type != 'attachment'" : "";
+		$sql .= ( 'off' == $options['trash_attachments'] || ! isset( $options['trash_attachments'] ) ) ? " AND post_type != 'attachment'" : '';
 		$children_query = $wpdb->prepare( $sql, $post_id );
 		$children = $wpdb->get_results( $children_query );
 
@@ -348,7 +361,7 @@ class Completely_Delete_Admin {
 		$options = $this->get_options();
 
 		$sql = "SELECT ID, post_status FROM $wpdb->posts WHERE post_parent = %d AND post_type != 'revision'";
-		$sql .= ( 'off' == $options['trash_attachments'] ) ? " AND post_type != 'attachment'" : "";
+		$sql .= ( 'off' == $options['trash_attachments'] || ! isset( $options['trash_attachments'] ) ) ? " AND post_type != 'attachment'" : '';
 		$children_query = $wpdb->prepare( $sql, $post_id );
 		$children = $wpdb->get_results( $children_query );
 
@@ -362,6 +375,8 @@ class Completely_Delete_Admin {
 	 * Add completely delete link into post row actions.
 	 *
 	 * @since    0.3
+	 *
+	 * @return array<string> Actions
 	 */
 	public function row_actions( $actions, $post ) {
 
@@ -377,29 +392,36 @@ class Completely_Delete_Admin {
 	 *
 	 * @since 0.5
 	 *
-	 * @return array|string The option settings
+	 * @return array<string> The setting options
 	 */
 	public function get_options() {
 
 		$this->options = get_option( $this->plugin_slug );
 
-		if ( empty( $this->options ) )
+		if ( empty( $this->options ) ) {
 			$this->options = array(
 				'trash_attachments' => 'off',
-				'delete_attachments' => 'off'
-				);
+				'delete_attachments' => 'off',
+			);
+		}
 
 		return $this->options;
 	}
 
+	/**
+	 * Get menu items by post_id
+	 *
+	 * @param  int $post_id Post ID
+	 * @return boolean|array An array of post id, false if the result is empty
+	 */
 	public function get_menu_items_by_post_id( $post_id ) {
 
-	        global $wpdb;
-	        $results = $wpdb->get_results( $wpdb->prepare( "SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %d", '_menu_item_object_id', $post_id ) );
-	        if ( ! empty( $results ) )
-	                return $results;
+		global $wpdb;
+		$results = $wpdb->get_results( $wpdb->prepare( "SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %d", '_menu_item_object_id', $post_id ) );
+		if ( ! empty( $results ) )
+			return $results;
 
-	        return false;
+		return false;
 	}
 
 }
